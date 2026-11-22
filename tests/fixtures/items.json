@@ -1,0 +1,35 @@
+{
+  "items": [
+    {
+      "kind": "overview",
+      "scope": "project",
+      "text": "Fixed the flaky login test by adding a mutex around the session cache refresh.",
+      "quotes": []
+    },
+    {
+      "kind": "finding",
+      "scope": "project",
+      "text": "The flaky login test failed because of a race in the session cache.",
+      "quotes": [
+        "race condition in the session cache"
+      ]
+    },
+    {
+      "kind": "decision",
+      "scope": "global",
+      "text": "Use a mutex around cache refresh rather than retries.",
+      "quotes": [
+        "decided to use a mutex around the session cache refresh",
+        "refreshSessionCache,  which lacks LOCKING"
+      ]
+    },
+    {
+      "kind": "mistake",
+      "scope": "global",
+      "text": "Do not assume tests are deterministic; check shared caches first.",
+      "quotes": [
+        "Added the regression test; all tests pass now"
+      ]
+    }
+  ]
+}

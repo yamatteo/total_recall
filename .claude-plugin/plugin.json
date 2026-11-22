@@ -1,0 +1,7 @@
+{
+  "name": "total-recall",
+  "description": "Long-term memory for Claude Code sessions: archive transcripts, store model-written memory items, and search them semantically.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": { "name": "yamatteo" }
+}

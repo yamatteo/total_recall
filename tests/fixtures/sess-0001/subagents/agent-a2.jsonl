@@ -1,0 +1,1 @@
+{"parentUuid":null,"isSidechain":true,"type":"assistant","uuid":"sa-0002","timestamp":"2026-01-01T10:30:00.000Z","cwd":"/work/demo-project","sessionId":"sess-0001","message":{"id":"msg_ssa-0002","role":"assistant","content":[{"type":"text","text":"Second agent without any meta file reports nothing notable."}]}}

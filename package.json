@@ -1,0 +1,27 @@
+{
+  "name": "total_recall",
+  "version": "0.1.0",
+  "description": "Long-term memory for Claude Code sessions: archive, redact, index and search.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22.5"
+  },
+  "bin": {
+    "total-recall": "bin/total-recall.js"
+  },
+  "scripts": {
+    "test": "vitest run --exclude tests/model.test.js",
+    "test:model": "vitest run tests/model.test.js",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}
