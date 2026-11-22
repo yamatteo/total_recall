@@ -132,9 +132,21 @@ export async function archive(o) {
   const md = fs.readFileSync(transcriptMd, 'utf8');
   /** @type {number[]} */
   const boundaryLines = [];
+  /** line of the first compact-summary header after each boundary (null when none follows) @type {Array<number | null>} */
+  const summaryLines = [];
+  /** @type {number | null | undefined} */
+  let pending;
   md.split('\n').forEach((l, i) => {
-    if (l.startsWith('# compact boundary')) boundaryLines.push(i + 1);
+    if (l.startsWith('# compact boundary')) {
+      if (pending === null) summaryLines.push(null);
+      boundaryLines.push(i + 1);
+      pending = null;
+    } else if (pending === null && /^## \S+ compact-summary /.test(l)) {
+      summaryLines.push(i + 1);
+      pending = undefined;
+    }
   });
+  if (pending === null) summaryLines.push(null);
   return {
     sessionId: data.sessionId,
     projectId: projectId(data.cwd),
@@ -145,5 +157,6 @@ export async function archive(o) {
     transcriptMd,
     lines: md.endsWith('\n') ? md.split('\n').length - 1 : md.split('\n').length,
     boundaryLines,
+    summaryLines,
   };
 }

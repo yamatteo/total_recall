@@ -22,10 +22,19 @@ Re-ingesting a session replaces its rows and files atomically.
     node bin/total-recall.js archive --session <id> [--transcript <path>]
     node bin/total-recall.js prepare --session <id> [--transcript <path>]
     node bin/total-recall.js doctor
+    node bin/total-recall.js recall "<query>" [--cwd <dir>] [--everywhere] [--limit N] [--json]
+    node bin/total-recall.js sessions [--cwd <dir>] [--everywhere] [--json]
+
+`recall` is the model-facing read side: it searches memory, groups hits by session and prints each session's
+transcript path, overview and items with `transcript.md:LINE` anchors (resolved at query time by scanning the
+transcript for `## <uuid> ` headers; `?` when unresolved or the file is missing). Scope: the project of `--cwd`
+(default: the current directory, via `project_id`) plus global items; `--everywhere` searches all projects.
+`sessions` lists archived sessions (including ones never wrapped up, with 0 items) newest first, with transcript
+paths to grep. Both only read the index; `sessions` loads no model.
 
 `archive` refreshes `raw.jsonl.gz`, `transcript.md`, subagent files and the session row, and never touches
 items or anchors (a transcript only grows, so anchors stay valid). It loads no model. `prepare` archives, then
-prints a report: paths, the line numbers of every `# compact boundary` in `transcript.md`, the items rules and
+prints a report: paths, the line numbers of every `# compact boundary` and of the `compact-summary` header after each in `transcript.md`, the items rules and
 the exact `ingest` command. `doctor` checks Node, `node_modules`, the cached q8 model, a writable
 `TOTAL_RECALL_HOME` and the index, and prints the fix for each failure (exit 1 if any fails).
 
@@ -33,7 +42,11 @@ the exact `ingest` command. `doctor` checks Node, `node_modules`, the cached q8 
 
 - `/wrapup` (user-invoked only): runs `prepare`, then the session's own model writes the items and runs
   `ingest`. If the session was compacted, the model's context holds only a summary, so the skill tells it to read
-  the part of `transcript.md` before the last boundary first. No external API is called.
+  the compact summaries at the listed lines first, then use targeted Read/Grep for details. No external API is called.
+- `/recall <question>` (model-invocable): runs `recall`, reads about 40 lines around anchors, falls back to
+  grepping transcripts found via `recall`/`sessions`, and answers with `transcript.md:LINE` sources. Its
+  `allowed-tools` has `Read(~/.claude/memory/**)` (Read rules also cover Grep and Glob; `Grep(path)` rules do not
+  match). If `TOTAL_RECALL_HOME` points elsewhere, add a matching `Read(...)` allow rule yourself.
 - SessionEnd hook: starts `archive` detached and returns at once (hooks have about 1.5 s), so every session is
   archived even if never wrapped up (Claude Code deletes transcripts after about 30 days). Log:
   `$TOTAL_RECALL_HOME/logs/archive.log`.

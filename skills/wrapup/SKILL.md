@@ -12,7 +12,7 @@ Session report (the session transcript has just been archived):
 Wrap up this session into memory items.
 
 1. Read the whole report above. If it shows an error instead of a report, tell the user and stop.
-2. If the report lists compact boundaries, or your own context begins with a compaction summary, read the part of `transcript.md` before the last boundary (Read with offset/limit, or grep) so the items cover the whole session, not only what is still in your context.
+2. If the report lists compact boundaries, or your own context begins with a compaction summary, first read the compact summaries at the listed lines (Read with offset/limit; each summarises everything before it), then use targeted Read/Grep of the earlier ranges for details and exact quotes, so the items cover the whole session, not only what is still in your context.
 3. Write the items:
    - exactly one `overview`;
    - `finding`, `mistake` and `decision` items as self-contained sentences that make sense without the session;

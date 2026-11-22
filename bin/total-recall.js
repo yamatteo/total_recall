@@ -8,12 +8,14 @@ const USAGE = `usage:
   total-recall prepare --session <id> [--transcript <path>]
   total-recall doctor
   total-recall search <query> [--scope project|global|all] [--project <project_id>] [--limit N] [--json]
+  total-recall recall <query> [--cwd <dir>] [--everywhere] [--limit N] [--json]
+  total-recall sessions [--cwd <dir>] [--everywhere] [--json]
 `;
 
 /** @param {string[]} argv */
 async function main(argv) {
   const [cmd, ...rest] = argv;
-  if (!['ingest', 'search', 'archive', 'prepare', 'doctor'].includes(String(cmd))) {
+  if (!['ingest', 'search', 'recall', 'sessions', 'archive', 'prepare', 'doctor'].includes(String(cmd))) {
     process.stderr.write(USAGE);
     return cmd === undefined || cmd === '--help' || cmd === 'help' ? 0 : 2;
   }
@@ -51,6 +53,17 @@ async function main(argv) {
     return 0;
   }
 
+  if (cmd === 'sessions') {
+    const { values } = parseArgs({
+      args: rest,
+      options: { cwd: { type: 'string' }, everywhere: { type: 'boolean', default: false }, json: { type: 'boolean', default: false } },
+    });
+    const { listSessions, formatSessions } = await import('../src/sessions.js');
+    const rows = await listSessions({ cwd: values.cwd, everywhere: values.everywhere });
+    console.log(values.json ? JSON.stringify(rows, null, 2) : formatSessions(rows, values.everywhere));
+    return 0;
+  }
+
   const { createBgeEmbedder } = await import('../src/embed.js');
   const embedder = createBgeEmbedder();
 
@@ -71,6 +84,29 @@ async function main(argv) {
       embedder,
     });
     console.log(`ingested session ${r.sessionId}: ${r.items} items, ${r.anchors} anchors, ${r.subagents} subagents`);
+    return 0;
+  }
+
+  if (cmd === 'recall') {
+    const { values, positionals } = parseArgs({
+      args: rest,
+      allowPositionals: true,
+      options: {
+        cwd: { type: 'string' },
+        everywhere: { type: 'boolean', default: false },
+        limit: { type: 'string', default: '8' },
+        json: { type: 'boolean', default: false },
+      },
+    });
+    const query = positionals.join(' ').trim();
+    const limit = Number(values.limit);
+    if (!query || !Number.isInteger(limit) || limit < 1) {
+      process.stderr.write(USAGE);
+      return 2;
+    }
+    const { recall, formatRecall } = await import('../src/recall.js');
+    const data = await recall({ query, cwd: values.cwd, everywhere: values.everywhere, limit, embedder });
+    console.log(values.json ? JSON.stringify(data, null, 2) : formatRecall(data));
     return 0;
   }
 

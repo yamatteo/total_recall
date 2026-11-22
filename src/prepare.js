@@ -13,7 +13,6 @@ export function formatReport({ info, binPath, transcript }) {
   const ingestCmd =
     `node ${q(binPath)} ingest --session ${info.sessionId} --items ${q(itemsFile)}` +
     (transcript ? ` --transcript ${q(path.resolve(transcript))}` : '');
-  const last = info.boundaryLines[info.boundaryLines.length - 1];
   return [
     `session: ${info.sessionId}`,
     `project_id: ${info.projectId}`,
@@ -22,8 +21,13 @@ export function formatReport({ info, binPath, transcript }) {
     `compact boundaries (line numbers of "# compact boundary" in transcript.md): ${
       info.boundaryLines.length ? info.boundaryLines.join(', ') : 'none'
     }`,
-    ...(last
-      ? [`  the session was compacted: read transcript.md lines 1-${last - 1} too, they are no longer in your context`]
+    ...(info.boundaryLines.length
+      ? [
+          `compact summaries (line numbers of "## <uuid> compact-summary" in transcript.md): ${
+            info.summaryLines.map((l) => l ?? '?').join(', ')
+          }`,
+          '  the session was compacted: first read the compact summaries at the listed lines (they summarise everything before them), then use targeted Read/Grep of the earlier ranges for details and exact quotes',
+        ]
       : []),
     `subagents: ${info.subagents}`,
     '',
