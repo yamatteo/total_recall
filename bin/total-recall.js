@@ -1,18 +1,56 @@
 #!/usr/bin/env node
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const USAGE = `usage:
   total-recall ingest --session <id> --items <file> [--transcript <path>]
+  total-recall archive --session <id> [--transcript <path>]
+  total-recall prepare --session <id> [--transcript <path>]
+  total-recall doctor
   total-recall search <query> [--scope project|global|all] [--project <project_id>] [--limit N] [--json]
 `;
 
 /** @param {string[]} argv */
 async function main(argv) {
   const [cmd, ...rest] = argv;
-  if (cmd !== 'ingest' && cmd !== 'search') {
+  if (!['ingest', 'search', 'archive', 'prepare', 'doctor'].includes(String(cmd))) {
     process.stderr.write(USAGE);
     return cmd === undefined || cmd === '--help' || cmd === 'help' ? 0 : 2;
   }
+
+  if (cmd === 'doctor') {
+    const { doctor } = await import('../src/doctor.js');
+    const results = await doctor();
+    for (const r of results) console.log(`${r.ok ? 'ok  ' : 'fail'} ${r.name}: ${r.detail}`);
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length) {
+      console.log('\nfixes:');
+      for (const r of failed) console.log(`  ${r.name}: ${r.fix}`);
+    }
+    return failed.length ? 1 : 0;
+  }
+
+  if (cmd === 'archive' || cmd === 'prepare') {
+    const { values } = parseArgs({ args: rest, options: { session: { type: 'string' }, transcript: { type: 'string' } } });
+    if (!values.session) {
+      process.stderr.write(USAGE);
+      return 2;
+    }
+    const { archive } = await import('../src/archive.js');
+    const info = await archive({ sessionId: values.session, transcript: values.transcript });
+    if (cmd === 'archive') {
+      console.log(
+        `archived session ${info.sessionId}: ${info.entries} entries, ${info.boundaries} compact boundaries, ${info.subagents} subagents`,
+      );
+    } else {
+      const { formatReport } = await import('../src/prepare.js');
+      console.log(
+        formatReport({ info, binPath: fileURLToPath(import.meta.url), transcript: values.transcript }),
+      );
+    }
+    return 0;
+  }
+
   const { createBgeEmbedder } = await import('../src/embed.js');
   const embedder = createBgeEmbedder();
 

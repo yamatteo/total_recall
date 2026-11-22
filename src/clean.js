@@ -125,7 +125,8 @@ export function renderBlocks(blocks) {
 export function renderTranscript(main, subagents) {
   const sections = [renderBlocks(main)];
   for (const s of subagents) {
-    const head = `# subagent ${s.id}${s.description ? `: ${s.description}` : ''}`;
+    const desc = s.description?.replace(/\s+/g, ' ').trim();
+    const head = `# subagent ${s.id}${desc ? `: ${desc}` : ''}`;
     sections.push(`${head}\n\n${renderBlocks(s.blocks)}`);
   }
   return `${sections.join('\n\n')}\n`;

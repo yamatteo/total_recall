@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { suppressSqliteWarning } from './warnings.js';
-import { dot, fromBlob, toBlob } from './embed.js';
+import { dot, fromBlob, toBlob } from './vec.js';
 import { indexPath } from './paths.js';
 
 /** @typedef {import('node:sqlite').DatabaseSync} Database */
@@ -22,8 +22,9 @@ CREATE INDEX IF NOT EXISTS anchors_item ON anchors(item_id);
 
 /**
  * Open (creating if needed) the index. Fails if it was built with a different embedding model.
+ * Without an embedder the model check is skipped (archive-only use; the model is recorded by the first ingest).
  * @param {string} home
- * @param {Embedder} embedder
+ * @param {Embedder} [embedder]
  * @returns {Promise<Database>}
  */
 export async function openDb(home, embedder) {
@@ -37,6 +38,7 @@ export async function openDb(home, embedder) {
   db.exec('PRAGMA busy_timeout = 5000');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec(SCHEMA);
+  if (!embedder) return db;
   const get = db.prepare('SELECT value FROM meta WHERE key = ?');
   const model = /** @type {{value: string} | undefined} */ (get.get('embedding_model'));
   if (!model) {
@@ -54,7 +56,7 @@ export async function openDb(home, embedder) {
 
 /**
  * @typedef {{session_id: string, project_id: string, project_path: string | null, started_at: string | null,
- *   ended_at: string | null, ingested_at: string, transcript_path: string, raw_path: string}} SessionRow
+ *   ended_at: string | null, ingested_at: string | null, transcript_path: string, raw_path: string}} SessionRow
  * @typedef {{kind: string, scope: string, text: string, embedding: Float32Array,
  *   anchors: Array<{uuid: string, quote: string}>}} ItemRow
  */
@@ -77,6 +79,21 @@ export function replaceSession(db, s, items) {
     const r = insItem.run(s.session_id, it.kind, it.scope, it.text, toBlob(it.embedding));
     for (const a of it.anchors) insAnchor.run(r.lastInsertRowid, a.uuid, a.quote);
   }
+}
+
+/**
+ * Insert or refresh a session row without touching its items or anchors (keeps ingested_at).
+ * Caller owns the surrounding transaction.
+ * @param {Database} db @param {SessionRow} s
+ */
+export function upsertSessionRow(db, s) {
+  db.prepare(
+    `INSERT INTO sessions(session_id, project_id, project_path, started_at, ended_at, ingested_at, transcript_path, raw_path)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(session_id) DO UPDATE SET project_id = excluded.project_id, project_path = excluded.project_path,
+       started_at = excluded.started_at, ended_at = excluded.ended_at,
+       transcript_path = excluded.transcript_path, raw_path = excluded.raw_path`,
+  ).run(s.session_id, s.project_id, s.project_path, s.started_at, s.ended_at, s.ingested_at, s.transcript_path, s.raw_path);
 }
 
 /** @param {Database} db */

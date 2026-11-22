@@ -4,7 +4,7 @@ Long-term memory for Claude Code sessions. This is the ingest core: it archives 
 session transcript, writes a cleaned and redacted greppable copy, validates the
 memory items the session's model wrote, anchors each item's verbatim quotes to
 transcript entry uuids, embeds the items and stores them in one SQLite index.
-Skills and hooks are not part of this step.
+It is also a Claude Code plugin (`.claude-plugin/plugin.json`): a `/wrapup` skill and two hooks.
 
 Plain JavaScript (ESM, JSDoc types checked by `tsc`), no build step. Needs Node >= 22.5
 (`node:sqlite`; its ExperimentalWarning is suppressed by the CLI).
@@ -19,6 +19,29 @@ Exactly one `overview`; every other item needs at least one quote; quotes are at
 characters and must appear verbatim (whitespace and case insensitive) in the cleaned transcript,
 including compaction summaries and subagents. If any quote is unmatched, ingest changes nothing.
 Re-ingesting a session replaces its rows and files atomically.
+    node bin/total-recall.js archive --session <id> [--transcript <path>]
+    node bin/total-recall.js prepare --session <id> [--transcript <path>]
+    node bin/total-recall.js doctor
+
+`archive` refreshes `raw.jsonl.gz`, `transcript.md`, subagent files and the session row, and never touches
+items or anchors (a transcript only grows, so anchors stay valid). It loads no model. `prepare` archives, then
+prints a report: paths, the line numbers of every `# compact boundary` in `transcript.md`, the items rules and
+the exact `ingest` command. `doctor` checks Node, `node_modules`, the cached q8 model, a writable
+`TOTAL_RECALL_HOME` and the index, and prints the fix for each failure (exit 1 if any fails).
+
+## Plugin
+
+- `/wrapup` (user-invoked only): runs `prepare`, then the session's own model writes the items and runs
+  `ingest`. If the session was compacted, the model's context holds only a summary, so the skill tells it to read
+  the part of `transcript.md` before the last boundary first. No external API is called.
+- SessionEnd hook: starts `archive` detached and returns at once (hooks have about 1.5 s), so every session is
+  archived even if never wrapped up (Claude Code deletes transcripts after about 30 days). Log:
+  `$TOTAL_RECALL_HOME/logs/archive.log`.
+- SessionStart hook (`startup`): a shell-only check; prints one line pointing at `doctor` if setup is incomplete.
+
+Setup is never automatic. Install dependencies with
+`ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm install` in the plugin directory, then run `doctor` for the model
+warm-up command.
 
 `--project` with scope `all` returns that project's items plus global ones.
 
