@@ -67,7 +67,13 @@ the runtime, the repo fallback, or missing), that `runtime/installed.json` match
 
 ### Install and setup
 
-Install through the marketplace (`noodle-code-foundry`). Claude Code clones the plugin into
+Install through the marketplace (`noodle-code-foundry`), inside Claude Code:
+
+    /plugin install total-recall --marketplace yamatteo/noodle_code_foundry
+
+On Claude Code before 2.1.275, add the marketplace first, then install: `/plugin marketplace add yamatteo/noodle_code_foundry`, then `/plugin install total-recall@noodle-code-foundry`.
+
+Claude Code clones the plugin into
 `~/.claude/plugins/cache/...` with no `node_modules` and no model, and a new folder for every version, so nothing is
 installed inside the plugin. Setup is never automatic: run it once, in a terminal (it takes minutes: onnxruntime is large
 and the q8 model is about 34 MB):
