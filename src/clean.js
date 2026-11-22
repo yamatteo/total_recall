@@ -2,7 +2,7 @@ import { ENV_FILE_REDACTION, readsEnvFile, redactText } from './redact.js';
 
 /**
  * @typedef {import('./parse.js').Entry} Entry
- * @typedef {{kind: 'message', uuid: string, role: string, timestamp: string, text: string}
+ * @typedef {{kind: 'message', uuid: string, role: string, timestamp: string, full: string, text: string}
  *   | {kind: 'boundary', line: string}} Block
  */
 
@@ -37,7 +37,8 @@ function resultText(content) {
 }
 
 /**
- * Clean one transcript's entries into blocks (redacted, truncated).
+ * Clean one transcript's entries into blocks (redacted). `full` is the untruncated text used
+ * for quote matching; `text` is the display text (long tool results truncated).
  * @param {Entry[]} entries
  * @returns {Block[]}
  */
@@ -59,42 +60,60 @@ export function cleanEntries(entries) {
     }
     if (e.type !== 'user' && e.type !== 'assistant') continue;
     const content = e.message?.content;
-    /** @type {string[]} */
+    /** @type {Array<{full: string, text: string}>} */
     const parts = [];
+    /** @param {string} t */
+    const plain = (t) => {
+      const r = redactText(t);
+      parts.push({ full: r, text: r });
+    };
     if (typeof content === 'string') {
-      parts.push(content);
+      plain(content);
     } else if (Array.isArray(content)) {
       for (const b of content) {
         if (!b || typeof b !== 'object') continue;
         if (b.type === 'text' && typeof b.text === 'string') {
-          parts.push(b.text);
+          plain(b.text);
         } else if (b.type === 'tool_use') {
           tools.set(b.id, { name: b.name, input: b.input });
-          parts.push(`tool: ${b.name} ${truncateInput(JSON.stringify(b.input ?? {}))}`);
+          plain(`tool: ${b.name} ${truncateInput(JSON.stringify(b.input ?? {}))}`);
         } else if (b.type === 'tool_result') {
           const call = tools.get(b.tool_use_id);
           const raw = resultText(b.content);
           if (call && readsEnvFile(call.name, call.input)) {
-            parts.push(`result: ${ENV_FILE_REDACTION}`);
+            plain(`result: ${ENV_FILE_REDACTION}`);
           } else if (raw.trim()) {
-            parts.push(`result: ${truncateLines(raw)}`);
+            const full = redactText(raw);
+            parts.push({ full: `result: ${full}`, text: `result: ${truncateLines(full)}` });
           }
         }
         // thinking, images, tool_reference and anything else: dropped
       }
     }
-    const text = redactText(parts.join('\n')).trim();
-    if (!text) continue;
+    const full = parts.map((p) => p.full).join('\n').trim();
+    const text = parts.map((p) => p.text).join('\n').trim();
+    if (!full) continue;
     const role = e.isCompactSummary ? 'compact-summary' : e.type;
-    blocks.push({ kind: 'message', uuid: e.uuid, role, timestamp: e.timestamp ?? '', text });
+    blocks.push({ kind: 'message', uuid: e.uuid, role, timestamp: e.timestamp ?? '', full, text });
   }
   return blocks;
+}
+
+/**
+ * Content lines starting with `#` get a leading space so that only structural lines
+ * (`## <uuid> <role> <timestamp>`, `# compact boundary …`, `# subagent …`) start with `#`.
+ * @param {string} text
+ */
+function escapeHeadings(text) {
+  return text.replace(/^#/gm, ' #');
 }
 
 /** @param {Block[]} blocks */
 export function renderBlocks(blocks) {
   return blocks
-    .map((b) => (b.kind === 'boundary' ? b.line : `## ${b.uuid} ${b.role} ${b.timestamp}\n\n${b.text}`))
+    .map((b) =>
+      b.kind === 'boundary' ? b.line : `## ${b.uuid} ${b.role} ${b.timestamp}\n\n${escapeHeadings(b.text)}`,
+    )
     .join('\n\n');
 }
 

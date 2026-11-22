@@ -99,10 +99,10 @@ describe('redactText', () => {
       'x\n-----BEGIN RSA PRIVATE KEY-----\nMIIabc\ndef\n-----END RSA PRIVATE KEY-----\ny',
       '[REDACTED:private-key]',
     ],
-    ['assign =', 'MY_SECRET=abc123', 'MY_SECRET=[REDACTED:secret]'],
-    ['assign :', 'db_password: hunter2', 'db_password: [REDACTED:secret]'],
-    ['assign json', '"apiKey": "abc 123"', '"apiKey": [REDACTED:secret]'],
-    ['assign quoted', "GITHUB_TOKEN='abc def'", 'GITHUB_TOKEN=[REDACTED:secret]'],
+    ['assign =', 'MY_SECRET=abc12345', 'MY_SECRET=[REDACTED:secret]'],
+    ['assign :', 'db_password: hunter2hunter2', 'db_password: [REDACTED:secret]'],
+    ['assign json', '"apiKey": "abc 12345"', '"apiKey": [REDACTED:secret]'],
+    ['assign quoted', "GITHUB_TOKEN='abc defgh'", 'GITHUB_TOKEN=[REDACTED:secret]'],
   ]);
   for (const [name, input, expected] of cases) {
     it(name, () => {

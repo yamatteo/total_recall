@@ -4,6 +4,20 @@
 
 const SECRET_NAME = '[A-Za-z0-9_.-]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_?KEY|PRIVATE_?KEY)[A-Za-z0-9_.-]*';
 
+/**
+ * Does the value of a NAME=value pair look like a secret? Short, numeric, boolean-ish
+ * values and existing placeholders are left alone.
+ * @param {string} raw
+ */
+function looksLikeSecret(raw) {
+  const v = raw.replace(/^["']|["']$/g, '');
+  if (v.startsWith('[REDACTED')) return false;
+  if (v.length < 8) return false;
+  if (/^[-+]?\d+([.,]\d+)*$/.test(v)) return false;
+  if (/^(?:true|false|null|none|undefined)$/i.test(v)) return false;
+  return true;
+}
+
 /** @type {Array<[RegExp, string | ((...m: string[]) => string)]>} */
 const RULES = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, '[REDACTED:private-key]'],
@@ -14,7 +28,7 @@ const RULES = [
   [/\bxox[abpr]-[A-Za-z0-9-]{10,}/g, '[REDACTED:slack-token]'],
   [
     new RegExp(`(\\b${SECRET_NAME}["']?\\s*[=:]\\s*)("[^"\\n]*"|'[^'\\n]*'|[^\\s"',;]+)`, 'gi'),
-    (_m, prefix, value) => (value.startsWith('[REDACTED') ? prefix + value : `${prefix}[REDACTED:secret]`),
+    (_m, prefix, value) => (looksLikeSecret(value) ? `${prefix}[REDACTED:secret]` : prefix + value),
   ],
 ];
 

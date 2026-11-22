@@ -34,6 +34,7 @@ export async function openDb(home, embedder) {
   const isNew = !fs.existsSync(file);
   const db = new DatabaseSync(file);
   if (isNew) fs.chmodSync(file, 0o600);
+  db.exec('PRAGMA busy_timeout = 5000');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec(SCHEMA);
   const get = db.prepare('SELECT value FROM meta WHERE key = ?');

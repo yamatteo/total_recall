@@ -53,7 +53,7 @@ export async function ingest(o) {
   /** @type {Array<{uuid: string, norm: string}>} */
   const index = [];
   for (const blocks of [main, ...subs.map((s) => s.blocks)]) {
-    for (const b of blocks) if (b.kind === 'message') index.push({ uuid: b.uuid, norm: normalizeText(b.text) });
+    for (const b of blocks) if (b.kind === 'message') index.push({ uuid: b.uuid, norm: normalizeText(b.full) });
   }
   const { anchors, unmatched } = resolveQuotes(items, index, normalizeText);
   if (unmatched.length) throw new UnmatchedQuotesError(unmatched);

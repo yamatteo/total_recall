@@ -34,7 +34,14 @@ Root: `TOTAL_RECALL_HOME` (default `~/.claude/memory/`), dirs 0700, files 0600.
 
 The raw archive is NOT redacted. Redaction of `transcript.md` and item text is best-effort
 pattern matching (API keys, GitHub/AWS/Slack tokens, JWTs, PEM private keys, `NAME=value`
-for secret-looking names, `.env` file reads) and will miss secrets.
+for secret-looking names, `.env` file reads) and will miss secrets. A `NAME=value` / `NAME: value` pair is redacted only when the value looks
+like a secret (at least 8 characters after stripping quotes, not purely numeric, not
+`true|false|null|none|undefined`).
+
+`transcript.md` grammar: the only lines starting with `#` are structural: `## <uuid> <role> <timestamp>`
+(role is `user`, `assistant` or `compact-summary`), `# compact boundary …` and `# subagent …`. Content
+lines that begin with `#` are written with one leading space. Long tool results are truncated there
+(first 20 and last 10 lines), but quotes in items are matched against the full, untruncated text.
 
 ## Embeddings
 
