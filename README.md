@@ -4,7 +4,14 @@ Long-term memory for Claude Code sessions. This is the ingest core: it archives 
 session transcript, writes a cleaned and redacted greppable copy, validates the
 memory items the session's model wrote, anchors each item's verbatim quotes to
 transcript entry uuids, embeds the items and stores them in one SQLite index.
-It is also a Claude Code plugin (`.claude-plugin/plugin.json`): a `/wrapup` skill and two hooks.
+It is also a Claude Code plugin (`.claude-plugin/plugin.json`): a `/wrapup` skill, a `/recall` skill and a setup-check hook.
+
+**Storage policy: only what the user wraps up.** Nothing is archived automatically (there is no SessionEnd hook,
+so no unredacted `raw.jsonl.gz` is written for sessions you did not choose). A session enters memory only through
+`/wrapup`. A session you forgot to wrap up can still be wrapped up later with `/wrapup <session-id>`, but only while
+Claude Code still keeps its transcript (default retention 30 days, set by `cleanupPeriodDays`). A wrapped-up session
+stays re-processable after Claude Code deletes the original, because `archive`/`prepare`/`ingest` fall back to the
+stored `raw.jsonl.gz` (and subagent files). `forget` removes a session from memory.
 
 Plain JavaScript (ESM, JSDoc types checked by `tsc`), no build step. Needs Node >= 22.5
 (`node:sqlite`; its ExperimentalWarning is suppressed by the CLI).
@@ -21,6 +28,7 @@ including compaction summaries and subagents. If any quote is unmatched, ingest 
 Re-ingesting a session replaces its rows and files atomically.
     node bin/total-recall.js archive --session <id> [--transcript <path>]
     node bin/total-recall.js prepare --session <id> [--transcript <path>]
+    node bin/total-recall.js forget --session <id>
     node bin/total-recall.js doctor
     node bin/total-recall.js recall "<query>" [--cwd <dir>] [--everywhere] [--limit N] [--json]
     node bin/total-recall.js sessions [--cwd <dir>] [--everywhere] [--json]
@@ -29,27 +37,30 @@ Re-ingesting a session replaces its rows and files atomically.
 transcript path, overview and items with `transcript.md:LINE` anchors (resolved at query time by scanning the
 transcript for `## <uuid> ` headers; `?` when unresolved or the file is missing). Scope: the project of `--cwd`
 (default: the current directory, via `project_id`) plus global items; `--everywhere` searches all projects.
-`sessions` lists archived sessions (including ones never wrapped up, with 0 items) newest first, with transcript
+`sessions` lists archived sessions (including any archived without items, e.g. a wrap-up abandoned after `prepare`) newest first, with transcript
 paths to grep. Both only read the index; `sessions` loads no model.
 
+`forget --session <id>` deletes the session's anchors, items and session row in one transaction, then (after the commit)
+removes `sessions/<id>/`; it prints what it removed, exits 1 for an unknown id (or if the files cannot be removed), asks
+no confirmation and loads no model. Use it for sessions the old SessionEnd hook archived or an abandoned wrap-up.
+
 `archive` refreshes `raw.jsonl.gz`, `transcript.md`, subagent files and the session row, and never touches
-items or anchors (a transcript only grows, so anchors stay valid). It loads no model. `prepare` archives, then
+items or anchors (a transcript only grows, so anchors stay valid). It loads no model. Source: `--transcript`, else Claude
+Code's own file under `<config>/projects/*/<id>.jsonl`, else total_recall's stored copy (the result is identical). `prepare` archives, then
 prints a report: paths, the line numbers of every `# compact boundary` and of the `compact-summary` header after each in `transcript.md`, the items rules and
 the exact `ingest` command. `doctor` checks Node, `node_modules`, the cached q8 model, a writable
 `TOTAL_RECALL_HOME` and the index, and prints the fix for each failure (exit 1 if any fails).
 
 ## Plugin
 
-- `/wrapup` (user-invoked only): runs `prepare`, then the session's own model writes the items and runs
+- `/wrapup [session-id]` (user-invoked only): runs `prepare` (for the given id, default the current session), then the model writes the items and runs
   `ingest`. If the session was compacted, the model's context holds only a summary, so the skill tells it to read
-  the compact summaries at the listed lines first, then use targeted Read/Grep for details. No external API is called.
+  the compact summaries at the listed lines first, then use targeted Read/Grep for details. For another session the model
+  was not in it, so it builds items only from that session's `transcript.md`. No external API is called.
 - `/recall <question>` (model-invocable): runs `recall`, reads about 40 lines around anchors, falls back to
   grepping transcripts found via `recall`/`sessions`, and answers with `transcript.md:LINE` sources. Its
   `allowed-tools` has `Read(~/.claude/memory/**)` (Read rules also cover Grep and Glob; `Grep(path)` rules do not
   match). If `TOTAL_RECALL_HOME` points elsewhere, add a matching `Read(...)` allow rule yourself.
-- SessionEnd hook: starts `archive` detached and returns at once (hooks have about 1.5 s), so every session is
-  archived even if never wrapped up (Claude Code deletes transcripts after about 30 days). Log:
-  `$TOTAL_RECALL_HOME/logs/archive.log`.
 - SessionStart hook (`startup`): a shell-only check; prints one line pointing at `doctor` if setup is incomplete.
 
 Setup is never automatic. Install dependencies with

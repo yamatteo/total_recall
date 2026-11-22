@@ -33,6 +33,25 @@ export function parseTranscriptFile(file) {
 }
 
 /**
+ * Description and agent type from the bytes of a subagent `.meta.json` (null or bad JSON gives nulls).
+ * @param {Buffer | null} raw
+ */
+export function parseSubagentMeta(raw) {
+  let description = null;
+  let agentType = null;
+  if (raw) {
+    try {
+      const m = JSON.parse(raw.toString('utf8'));
+      if (typeof m.description === 'string') description = m.description;
+      if (typeof m.agentType === 'string') agentType = m.agentType;
+    } catch {
+      // ignore bad meta
+    }
+  }
+  return { description, agentType };
+}
+
+/**
  * List subagent transcripts at <dir of transcript>/<sessionId>/subagents/.
  * @param {string} transcriptPath
  * @param {string} sessionId
@@ -54,17 +73,7 @@ export function listSubagents(transcriptPath, sessionId) {
       const id = n.replace(/\.jsonl$/, '');
       const metaName = `${id}.meta.json`;
       const metaFile = names.includes(metaName) ? path.join(dir, metaName) : null;
-      let description = null;
-      let agentType = null;
-      if (metaFile) {
-        try {
-          const m = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
-          if (typeof m.description === 'string') description = m.description;
-          if (typeof m.agentType === 'string') agentType = m.agentType;
-        } catch {
-          // ignore bad meta
-        }
-      }
-      return { id, file: path.join(dir, n), metaFile, description, agentType };
+      const meta = parseSubagentMeta(metaFile ? fs.readFileSync(metaFile) : null);
+      return { id, file: path.join(dir, n), metaFile, ...meta };
     });
 }

@@ -95,6 +95,22 @@ registerHooks({ resolve(s, c, n) { if (s.includes('transformers') || s.endsWith(
     expect(r.stdout).toMatch(new RegExp(`^archived session ${SESSION}: \\d+ entries, 1 compact boundaries, 2 subagents\\n$`));
   });
 
+  it('forget never loads transformers', () => {
+    const home = tmp();
+    const hook = path.join(tmp(), 'trace.mjs');
+    fs.writeFileSync(
+      hook,
+      `import { registerHooks } from 'node:module';
+registerHooks({ resolve(s, c, n) { if (s.includes('transformers') || s.endsWith('embed.js')) throw new Error('forbidden import: ' + s); return n(s, c); } });\n`,
+    );
+    const env = { ...process.env, TOTAL_RECALL_HOME: home };
+    spawnSync('node', [BIN, 'archive', '--session', SESSION, '--transcript', TRANSCRIPT], { env });
+    const r = spawnSync('node', ['--import', hook, BIN, 'forget', '--session', SESSION], { encoding: 'utf8', env });
+    expect(r.stderr).toBe('');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(`forgot session ${SESSION}: removed 0 items`);
+  });
+
   it('prepare reports boundary line numbers that match transcript.md', () => {
     const home = tmp();
     const r = cli(home, ['prepare', '--session', SESSION, '--transcript', TRANSCRIPT]);
@@ -119,37 +135,6 @@ registerHooks({ resolve(s, c, n) { if (s.includes('transformers') || s.endsWith(
     expect(bad.status).toBe(1);
     expect(bad.stdout).toMatch(/fail embedding model/);
     expect(bad.stdout).toMatch(/fixes:/);
-  });
-});
-
-describe('session-end hook', () => {
-  const hook = path.join(ROOT, 'hooks', 'session-end.sh');
-
-  /** @param {string} input @param {string} home */
-  function runHook(input, home) {
-    const t0 = Date.now();
-    const r = spawnSync('sh', [hook], { input, encoding: 'utf8', env: { ...process.env, TOTAL_RECALL_HOME: home } });
-    return { status: r.status, ms: Date.now() - t0 };
-  }
-
-  it('returns fast and the archive appears shortly after', async () => {
-    const home = tmp();
-    const r = runHook(JSON.stringify({ session_id: SESSION, transcript_path: TRANSCRIPT, cwd: '/x' }), home);
-    expect(r.status).toBe(0);
-    expect(r.ms).toBeLessThan(1000);
-    const md = path.join(home, 'sessions', SESSION, 'transcript.md');
-    const end = Date.now() + 15000;
-    while (!fs.existsSync(md) && Date.now() < end) await new Promise((res) => setTimeout(res, 100));
-    expect(fs.existsSync(md)).toBe(true);
-    expect(fs.existsSync(path.join(home, 'logs', 'archive.log'))).toBe(true);
-  });
-
-  it('exits 0 on garbage input and spawns nothing', () => {
-    const home = tmp();
-    expect(runHook('not json at all', home).status).toBe(0);
-    expect(runHook('', home).status).toBe(0);
-    expect(runHook(JSON.stringify({ session_id: '../evil' }), home).status).toBe(0);
-    expect(fs.existsSync(path.join(home, 'sessions'))).toBe(false);
   });
 });
 

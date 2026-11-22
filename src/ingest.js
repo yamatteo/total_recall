@@ -32,7 +32,7 @@ export async function ingest(o) {
 
   const items = validateItems(JSON.parse(fs.readFileSync(o.itemsFile, 'utf8')));
 
-  const data = loadSession(sessionId, o.transcript);
+  const data = loadSession(sessionId, o.transcript, home);
   const { main, subs } = data;
 
   /** @type {Array<{uuid: string, norm: string}>} */

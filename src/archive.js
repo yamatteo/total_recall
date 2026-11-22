@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { cleanEntries, renderTranscript } from './clean.js';
 import { openDb, upsertSessionRow } from './db.js';
 import { assertSessionId, findTranscript, memoryHome, sessionDir } from './paths.js';
-import { listSubagents, parseJsonl } from './parse.js';
+import { listSubagents, parseJsonl, parseSubagentMeta } from './parse.js';
 import { projectId } from './project.js';
 
 /** @typedef {import('./db.js').Database} Database */
@@ -14,24 +14,65 @@ import { projectId } from './project.js';
 const write = (p, /** @type {string | Uint8Array} */ data) => fs.writeFileSync(p, data, { mode: 0o600 });
 
 /**
- * Read and clean the main transcript and its subagents.
+ * Read and clean the main transcript and its subagents. Source, in order: an explicit `transcriptPath`
+ * (must exist), Claude Code's own file, then total_recall's archive (`sessions/<id>/raw.jsonl.gz` and
+ * `subagents/*.jsonl.gz`), which outlives the original.
  * @param {string} sessionId
  * @param {string} [transcriptPath]
+ * @param {string} [home]
  */
-export function loadSession(sessionId, transcriptPath) {
+export function loadSession(sessionId, transcriptPath, home = memoryHome()) {
   assertSessionId(sessionId);
   const transcript = transcriptPath ?? findTranscript(sessionId);
-  if (!transcript || !fs.existsSync(transcript)) {
-    throw new Error(`transcript for session ${sessionId} not found${transcript ? `: ${transcript}` : ''}`);
+  /** @type {Buffer} */
+  let rawMain;
+  /** @type {Array<{id: string, description: string | null, agentType: string | null, raw: Buffer, metaRaw: Buffer | null}>} */
+  let rawSubs;
+  if (transcript && fs.existsSync(transcript)) {
+    rawMain = fs.readFileSync(transcript);
+    rawSubs = listSubagents(transcript, sessionId).map((s) => ({
+      id: s.id,
+      description: s.description,
+      agentType: s.agentType,
+      raw: fs.readFileSync(s.file),
+      metaRaw: s.metaFile ? fs.readFileSync(s.metaFile) : null,
+    }));
+  } else {
+    const stored = sessionDir(home, sessionId);
+    const storedMain = path.join(stored, 'raw.jsonl.gz');
+    if (transcriptPath || !fs.existsSync(storedMain)) {
+      throw new Error(
+        `transcript for session ${sessionId} not found${transcript ? `: ${transcript}` : ''}` +
+          (transcriptPath ? '' : ` (no Claude Code transcript and no archive at ${storedMain})`),
+      );
+    }
+    rawMain = zlib.gunzipSync(fs.readFileSync(storedMain));
+    const subDir = path.join(stored, 'subagents');
+    /** @type {string[]} */
+    let names = [];
+    try {
+      names = fs.readdirSync(subDir);
+    } catch {
+      // no subagents archived
+    }
+    rawSubs = names
+      .filter((n) => /^agent-.+\.jsonl\.gz$/.test(n))
+      .sort()
+      .map((n) => {
+        const id = n.replace(/\.jsonl\.gz$/, '');
+        const metaFile = path.join(subDir, `${id}.meta.json`);
+        const metaRaw = fs.existsSync(metaFile) ? fs.readFileSync(metaFile) : null;
+        return {
+          id,
+          ...parseSubagentMeta(metaRaw),
+          raw: zlib.gunzipSync(fs.readFileSync(path.join(subDir, n))),
+          metaRaw,
+        };
+      });
   }
-  const rawMain = fs.readFileSync(transcript);
   const mainEntries = parseJsonl(rawMain.toString('utf8'));
   const main = cleanEntries(mainEntries);
-  const subs = listSubagents(transcript, sessionId).map((s) => ({
-    ...s,
-    raw: fs.readFileSync(s.file),
-    blocks: cleanEntries(parseJsonl(fs.readFileSync(s.file, 'utf8'))),
-  }));
+  const subs = rawSubs.map((s) => ({ ...s, blocks: cleanEntries(parseJsonl(s.raw.toString('utf8'))) }));
   const stamps = mainEntries.map((e) => e.timestamp).filter((t) => typeof t === 'string').sort();
   const cwd = mainEntries.find((e) => typeof e.cwd === 'string')?.cwd ?? null;
   return { sessionId, rawMain, mainEntries, main, subs, stamps, cwd };
@@ -62,7 +103,7 @@ export function commitSession({ db, home, data, itemsJson, keepItems, dbWork }) 
       fs.mkdirSync(path.join(tmpDir, 'subagents'), { mode: 0o700 });
       for (const s of subs) {
         write(path.join(tmpDir, 'subagents', `${s.id}.jsonl.gz`), zlib.gzipSync(s.raw));
-        if (s.metaFile) write(path.join(tmpDir, 'subagents', `${s.id}.meta.json`), fs.readFileSync(s.metaFile));
+        if (s.metaRaw) write(path.join(tmpDir, 'subagents', `${s.id}.meta.json`), s.metaRaw);
       }
     }
     write(
@@ -104,7 +145,7 @@ export function commitSession({ db, home, data, itemsJson, keepItems, dbWork }) 
  */
 export async function archive(o) {
   const home = o.home ?? memoryHome();
-  const data = loadSession(o.sessionId, o.transcript);
+  const data = loadSession(o.sessionId, o.transcript, home);
   const db = await openDb(home);
   try {
     commitSession({

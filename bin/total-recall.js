@@ -6,6 +6,7 @@ const USAGE = `usage:
   total-recall ingest --session <id> --items <file> [--transcript <path>]
   total-recall archive --session <id> [--transcript <path>]
   total-recall prepare --session <id> [--transcript <path>]
+  total-recall forget --session <id>
   total-recall doctor
   total-recall search <query> [--scope project|global|all] [--project <project_id>] [--limit N] [--json]
   total-recall recall <query> [--cwd <dir>] [--everywhere] [--limit N] [--json]
@@ -15,7 +16,7 @@ const USAGE = `usage:
 /** @param {string[]} argv */
 async function main(argv) {
   const [cmd, ...rest] = argv;
-  if (!['ingest', 'search', 'recall', 'sessions', 'archive', 'prepare', 'doctor'].includes(String(cmd))) {
+  if (!['ingest', 'search', 'recall', 'sessions', 'archive', 'prepare', 'forget', 'doctor'].includes(String(cmd))) {
     process.stderr.write(USAGE);
     return cmd === undefined || cmd === '--help' || cmd === 'help' ? 0 : 2;
   }
@@ -30,6 +31,20 @@ async function main(argv) {
       for (const r of failed) console.log(`  ${r.name}: ${r.fix}`);
     }
     return failed.length ? 1 : 0;
+  }
+
+  if (cmd === 'forget') {
+    const { values } = parseArgs({ args: rest, options: { session: { type: 'string' } } });
+    if (!values.session) {
+      process.stderr.write(USAGE);
+      return 2;
+    }
+    const { forget } = await import('../src/forget.js');
+    const r = await forget({ sessionId: values.session });
+    console.log(
+      `forgot session ${r.sessionId}: removed ${r.items} items, ${r.anchors} anchors${r.removedDir ? `, directory ${r.dir}` : ''}`,
+    );
+    return 0;
   }
 
   if (cmd === 'archive' || cmd === 'prepare') {
