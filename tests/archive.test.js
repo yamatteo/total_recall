@@ -146,8 +146,8 @@ describe('session-start hook', () => {
     expect(run(path.join(ROOT, '.cache', 'transformers'))).toBe('');
     const out = run(tmp());
     expect(out.trim().split('\n')).toHaveLength(1);
-    expect(out).toContain('total-recall: setup incomplete');
-    expect(out).toContain('bin/total-recall.js doctor');
+    expect(out).toContain('total-recall: setup needed');
+    expect(out).toContain('bin/total-recall.js setup');
   });
 });
 

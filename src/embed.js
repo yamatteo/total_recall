@@ -1,4 +1,7 @@
-import { modelCacheDir } from './paths.js';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { MODEL_DIM, MODEL_DTYPE, MODEL_ID, MODEL_NAME, QUERY_PREFIX } from './model-id.js';
+import { modelCacheDir, repoRoot, resolveTransformers } from './runtime.js';
 
 /**
  * @typedef {object} Embedder
@@ -8,11 +11,7 @@ import { modelCacheDir } from './paths.js';
  * @property {(query: string) => Promise<Float32Array>} embedQuery prefixed, normalised
  */
 
-export const MODEL_NAME = 'Xenova/bge-small-en-v1.5';
-export const MODEL_DTYPE = 'q8';
-export const MODEL_ID = `${MODEL_NAME}:${MODEL_DTYPE}`;
-export const MODEL_DIM = 384;
-export const QUERY_PREFIX = 'Represent this sentence for searching relevant passages: ';
+export { MODEL_DIM, MODEL_DTYPE, MODEL_ID, MODEL_NAME, QUERY_PREFIX };
 
 /**
  * Real embedder: bge-small-en-v1.5 (q8), offline from the local cache.
@@ -23,7 +22,15 @@ export function createBgeEmbedder() {
   let pipe = null;
   const load = () => {
     pipe ??= (async () => {
-      const { env, pipeline } = await import('@huggingface/transformers');
+      const r = resolveTransformers();
+      /** @type {any} */
+      let tf;
+      try {
+        tf = r.source === 'runtime' && r.entry ? await import(pathToFileURL(r.entry).href) : await import('@huggingface/transformers');
+      } catch (e) {
+        throw new Error(`cannot load @huggingface/transformers (run: node ${path.join(repoRoot(), 'bin', 'total-recall.js')} setup): ${e instanceof Error ? e.message : String(e)}`);
+      }
+      const { env, pipeline } = tf;
       env.cacheDir = modelCacheDir();
       env.allowRemoteModels = false;
       return pipeline('feature-extraction', MODEL_NAME, { dtype: MODEL_DTYPE });

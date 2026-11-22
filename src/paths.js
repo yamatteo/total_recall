@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const SESSION_ID_RE = /^[A-Za-z0-9_-]+$/;
 
@@ -24,13 +23,6 @@ export function memoryHome() {
 export const indexPath = (home) => path.join(home, 'index.sqlite');
 /** @param {string} home @param {string} sessionId */
 export const sessionDir = (home, sessionId) => path.join(home, 'sessions', sessionId);
-
-/** Model cache dir (TOTAL_RECALL_MODEL_CACHE or <repo>/.cache/transformers). */
-export function modelCacheDir() {
-  if (process.env.TOTAL_RECALL_MODEL_CACHE) return process.env.TOTAL_RECALL_MODEL_CACHE;
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.resolve(here, '..', '.cache', 'transformers');
-}
 
 /**
  * Find <config>/projects/<slug>/<sessionId>.jsonl.

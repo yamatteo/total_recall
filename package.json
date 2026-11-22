@@ -1,6 +1,6 @@
 {
   "name": "total_recall",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Long-term memory for Claude Code sessions: archive, redact, index and search.",
   "type": "module",
   "license": "MIT",
@@ -17,7 +17,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.3.2"
+    "@huggingface/transformers": "4.3.2"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

@@ -1,14 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MODEL_NAME } from './embed.js';
-import { memoryHome, modelCacheDir } from './paths.js';
+import { memoryHome } from './paths.js';
 import { openDb } from './db.js';
+import { installedStatus, repoRoot, resolveModelCache, resolveTransformers } from './runtime.js';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = repoRoot();
+const SETUP_FIX = `node ${path.join(root, 'bin', 'total-recall.js')} setup`;
 
-/** Path of the q8 model file inside the cache. */
-export const modelFile = () => path.join(modelCacheDir(), ...MODEL_NAME.split('/'), 'onnx', 'model_quantized.onnx');
+/** Path of the q8 model file inside the resolved cache. */
+export const modelFile = () => resolveModelCache().file;
 
 /**
  * Run every setup check.
@@ -29,24 +30,28 @@ export async function doctor() {
     fix: 'install Node 22.5 or newer',
   });
 
-  const tf = path.join(root, 'node_modules', '@huggingface', 'transformers');
+  const tf = resolveTransformers();
   out.push({
     name: 'dependencies',
-    ok: fs.existsSync(tf),
-    detail: tf,
-    fix: `cd ${root} && ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm install`,
+    ok: tf.source !== 'missing',
+    detail: tf.source === 'missing' ? `not found (looked in ${tf.dir} and the repo's node_modules)` : `${tf.source}: ${tf.dir}`,
+    fix: SETUP_FIX,
   });
 
-  const model = modelFile();
-  const cache = modelCacheDir();
-  const warm =
-    `import {env,pipeline} from '@huggingface/transformers'; env.cacheDir=${JSON.stringify(cache)}; ` +
-    `await pipeline('feature-extraction','${MODEL_NAME}',{dtype:'q8'})`;
+  const model = resolveModelCache();
   out.push({
     name: 'embedding model',
-    ok: fs.existsSync(model),
-    detail: model,
-    fix: `cd ${root} && node --input-type=module -e ${JSON.stringify(warm)}`,
+    ok: model.found,
+    detail: model.found ? `${model.source}: ${model.file}` : `missing: ${model.file}`,
+    fix: SETUP_FIX,
+  });
+
+  const inst = installedStatus();
+  out.push({
+    name: 'runtime version',
+    ok: inst.state !== 'mismatch',
+    detail: inst.state === 'absent' ? `${inst.detail} (nothing to compare)` : inst.detail,
+    fix: SETUP_FIX,
   });
 
   const home = memoryHome();

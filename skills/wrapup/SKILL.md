@@ -3,7 +3,7 @@ name: wrapup
 description: Write long-term memory items for this session, or for an earlier one given by session id (overview, findings, mistakes, decisions), and ingest them into total_recall.
 argument-hint: [session-id]
 disable-model-invocation: true
-allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/bin/total-recall.js *)
+allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/bin/total-recall.js *) Read(~/.claude/memory/**)
 ---
 
 Wrap up a session into memory items. Target session: the id in `$ARGUMENTS` if one is given, otherwise the current session `${CLAUDE_SESSION_ID}`.

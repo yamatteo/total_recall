@@ -8,6 +8,7 @@ const USAGE = `usage:
   total-recall prepare --session <id> [--transcript <path>]
   total-recall forget --session <id>
   total-recall doctor
+  total-recall setup [--dry-run]
   total-recall search <query> [--scope project|global|all] [--project <project_id>] [--limit N] [--json]
   total-recall recall <query> [--cwd <dir>] [--everywhere] [--limit N] [--json]
   total-recall sessions [--cwd <dir>] [--everywhere] [--json]
@@ -16,7 +17,7 @@ const USAGE = `usage:
 /** @param {string[]} argv */
 async function main(argv) {
   const [cmd, ...rest] = argv;
-  if (!['ingest', 'search', 'recall', 'sessions', 'archive', 'prepare', 'forget', 'doctor'].includes(String(cmd))) {
+  if (!['ingest', 'search', 'recall', 'sessions', 'archive', 'prepare', 'forget', 'doctor', 'setup'].includes(String(cmd))) {
     process.stderr.write(USAGE);
     return cmd === undefined || cmd === '--help' || cmd === 'help' ? 0 : 2;
   }
@@ -31,6 +32,13 @@ async function main(argv) {
       for (const r of failed) console.log(`  ${r.name}: ${r.fix}`);
     }
     return failed.length ? 1 : 0;
+  }
+
+  if (cmd === 'setup') {
+    const { values } = parseArgs({ args: rest, options: { 'dry-run': { type: 'boolean', default: false } } });
+    const { setup } = await import('../src/setup.js');
+    await setup({ dryRun: values['dry-run'] });
+    return 0;
   }
 
   if (cmd === 'forget') {

@@ -30,6 +30,7 @@ Re-ingesting a session replaces its rows and files atomically.
     node bin/total-recall.js prepare --session <id> [--transcript <path>]
     node bin/total-recall.js forget --session <id>
     node bin/total-recall.js doctor
+    node bin/total-recall.js setup [--dry-run]
     node bin/total-recall.js recall "<query>" [--cwd <dir>] [--everywhere] [--limit N] [--json]
     node bin/total-recall.js sessions [--cwd <dir>] [--everywhere] [--json]
 
@@ -48,7 +49,8 @@ no confirmation and loads no model. Use it for sessions the old SessionEnd hook 
 items or anchors (a transcript only grows, so anchors stay valid). It loads no model. Source: `--transcript`, else Claude
 Code's own file under `<config>/projects/*/<id>.jsonl`, else total_recall's stored copy (the result is identical). `prepare` archives, then
 prints a report: paths, the line numbers of every `# compact boundary` and of the `compact-summary` header after each in `transcript.md`, the items rules and
-the exact `ingest` command. `doctor` checks Node, `node_modules`, the cached q8 model, a writable
+the exact `ingest` command. `doctor` checks Node, the embedding library, the cached q8 model (each reported as resolved from
+the runtime, the repo fallback, or missing), that `runtime/installed.json` matches this plugin version, a writable
 `TOTAL_RECALL_HOME` and the index, and prints the fix for each failure (exit 1 if any fails).
 
 ## Plugin
@@ -61,11 +63,35 @@ the exact `ingest` command. `doctor` checks Node, `node_modules`, the cached q8 
   grepping transcripts found via `recall`/`sessions`, and answers with `transcript.md:LINE` sources. Its
   `allowed-tools` has `Read(~/.claude/memory/**)` (Read rules also cover Grep and Glob; `Grep(path)` rules do not
   match). If `TOTAL_RECALL_HOME` points elsewhere, add a matching `Read(...)` allow rule yourself.
-- SessionStart hook (`startup`): a shell-only check; prints one line pointing at `doctor` if setup is incomplete.
+- SessionStart hook (`startup`): a shell-only check; prints one line pointing at `setup` if setup is incomplete or out of date.
 
-Setup is never automatic. Install dependencies with
-`ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm install` in the plugin directory, then run `doctor` for the model
-warm-up command.
+### Install and setup
+
+Install through the marketplace (`noodle-code-foundry`). Claude Code clones the plugin into
+`~/.claude/plugins/cache/...` with no `node_modules` and no model, and a new folder for every version, so nothing is
+installed inside the plugin. Setup is never automatic: run it once, in a terminal (it takes minutes: onnxruntime is large
+and the q8 model is about 34 MB):
+
+    node <plugin dir>/bin/total-recall.js setup
+
+`setup --dry-run` prints what it would do and changes nothing. `setup` fills the **runtime folder**,
+`<TOTAL_RECALL_HOME>/runtime/` (default `~/.claude/memory/runtime/`), which survives plugin updates:
+
+    runtime/package.json     private, pins @huggingface/transformers exactly (the version in the plugin's package.json)
+    runtime/node_modules/    npm install --omit=dev, with ONNXRUNTIME_NODE_INSTALL_CUDA=skip
+    runtime/models/          the transformers cache dir (the q8 model, downloaded once)
+    runtime/installed.json   {"transformers":"<version>","model":"<model id>"}, written only when setup succeeded
+
+Re-running `setup` skips what is already done. After a plugin update that changes the required transformers version or
+the model, `doctor` and the SessionStart line report a mismatch; run `setup` again. Searching stays offline: only
+`setup` downloads.
+
+Development from a repo checkout needs no runtime folder: the library falls back to the repo's own `node_modules`
+(`npm install`), and the model to `<repo>/.cache/transformers`. Order: the library comes from `runtime/node_modules`, else
+the repo's; the model cache is `TOTAL_RECALL_MODEL_CACHE`, else `runtime/models` if the model is there, else
+`<repo>/.cache/transformers` if it is there, else `runtime/models`.
+
+`doctor` is the check: it shows where each piece resolved and the fix for anything missing.
 
 `--project` with scope `all` returns that project's items plus global ones.
 
@@ -92,8 +118,8 @@ lines that begin with `#` are written with one leading space. Long tool results 
 
 ## Embeddings
 
-`Xenova/bge-small-en-v1.5` (q8), run offline from `TOTAL_RECALL_MODEL_CACHE`
-(default `<repo>/.cache/transformers`; the model must already be cached). The model is recorded
+`Xenova/bge-small-en-v1.5` (q8), run offline from the model cache (see Install and setup;
+the model must already be there, `setup` puts it in `runtime/models`). The model is recorded
 in the index; opening an index built with a different model fails with a "re-index needed" error.
 Search is a brute-force dot product over Float32 blobs.
 
